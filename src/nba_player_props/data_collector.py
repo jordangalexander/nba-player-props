@@ -102,30 +102,44 @@ class DataCollector:
         Returns:
             DataFrame with player box scores or None if error
         """
-        try:
-            time.sleep(self.rate_limit_delay)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                time.sleep(self.rate_limit_delay)
 
-            game_log = playergamelog.PlayerGameLog(
-                player_id=player_id, season=season, season_type_all_star=season_type
-            )
+                game_log = playergamelog.PlayerGameLog(
+                    player_id=player_id,
+                    season=season,
+                    season_type_all_star=season_type,
+                    timeout=60,  # Increase timeout to 60 seconds
+                )
 
-            df = game_log.get_data_frames()[0]
+                df = game_log.get_data_frames()[0]
 
-            if not df.empty:
-                # Add metadata columns
-                df["SEASON"] = season
-                df["SEASON_TYPE"] = season_type
-                df["PLAYER_ID"] = player_id
+                if not df.empty:
+                    # Add metadata columns
+                    df["SEASON"] = season
+                    df["SEASON_TYPE"] = season_type
+                    df["PLAYER_ID"] = player_id
 
-            return df
+                return df
 
-        except Exception as e:
-            error_msg = (
-                f"Error fetching {season_type} data for "
-                f"player {player_id}, season {season}: {e}"
-            )
-            logger.info(error_msg)
-            return None
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2  # Exponential backoff
+                    logger.warning(
+                        f"Attempt {attempt + 1} failed for player {player_id}, "
+                        f"season {season} ({season_type}). "
+                        f"Retrying in {wait_time}s..."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    error_msg = (
+                        f"Error fetching {season_type} data for "
+                        f"player {player_id}, season {season}: {e}"
+                    )
+                    logger.info(error_msg)
+                    return None
 
     def get_player_all_seasons(
         self,

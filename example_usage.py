@@ -62,88 +62,246 @@ def get_all_historical_players(collector: DataCollector) -> list[int]:
     return player_list
 
 
-def collect_all_nba_data(
-    start_year: int = 2010,
+def collect_season_data(
+    season: str,
+    player_ids: list[int],
+    collector: DataCollector,
     include_playoffs: bool = True,
-    batch_size: int = 25,
-    save_progress: bool = True,
-    output_file: str = "nba_comprehensive_data.csv",
+    batch_size: int = 12,
 ) -> pd.DataFrame:
     """
-    Collect comprehensive NBA player box score data from start_year to present.
+    Collect NBA data for all players in a specific season.
+
+    Args:
+        season: Season string (e.g., "2023-24")
+        player_ids: List of player IDs to collect data for
+        collector: DataCollector instance
+        include_playoffs: Whether to include playoff games
+        batch_size: Number of players to process per batch
+
+    Returns:
+        DataFrame with all player data for the season
+    """
+    logger.info(f"🏀 Collecting data for season {season}")
+    logger.info(f"Players to process: {len(player_ids)}")
+    logger.info(f"Batch size: {batch_size}")
+
+    all_season_data = []
+    total_games = 0
+    failed_players = []
+
+    # Process players in smaller batches
+    for i in range(0, len(player_ids), batch_size):
+        batch_end = min(i + batch_size, len(player_ids))
+        batch_player_ids = player_ids[i:batch_end]
+        batch_num = i // batch_size + 1
+        total_batches = (len(player_ids) + batch_size - 1) // batch_size
+
+        logger.info(
+            f"📦 Processing batch {batch_num}/{total_batches}: "
+            f"Players {i + 1}-{batch_end}"
+        )
+
+        try:
+            # Collect data for this batch in the specific season
+            batch_data = collector.collect_multiple_players(
+                batch_player_ids, seasons=[season], include_playoffs=include_playoffs
+            )
+
+            if not batch_data.empty:
+                all_season_data.append(batch_data)
+                batch_games = len(batch_data)
+                total_games += batch_games
+                logger.info(f"✅ Batch {batch_num}: {batch_games} games collected")
+            else:
+                logger.warning(f"⚠️ Batch {batch_num}: No data collected")
+
+            # Brief pause between batches to be API-friendly
+            import time
+
+            time.sleep(2.0)
+
+        except Exception as e:
+            logger.error(f"❌ Batch {batch_num} failed: {e}")
+            failed_players.extend(batch_player_ids)
+            continue
+
+    # Combine all batch data for the season
+    if all_season_data:
+        season_df = pd.concat(all_season_data, ignore_index=True)
+        season_df = season_df.sort_values(["PLAYER_ID", "GAME_DATE"])
+        season_df = season_df.reset_index(drop=True)
+
+        logger.info(f"🎉 Season {season} complete!")
+        logger.info(f"📊 Total games: {len(season_df)}")
+        logger.info(f"👥 Unique players: {season_df['PLAYER_ID'].nunique()}")
+
+        if failed_players:
+            logger.warning(f"⚠️ Failed players: {len(failed_players)}")
+
+        return season_df
+    else:
+        logger.error(f"❌ No data collected for season {season}")
+        return pd.DataFrame()
+
+
+def collect_all_nba_data_by_season(
+    start_year: int = 2010,
+    include_playoffs: bool = True,
+    batch_size: int = 12,
+    save_progress: bool = True,
+    output_dir: str = "season_data",
+) -> dict[str, pd.DataFrame]:
+    """
+    Collect NBA data season-by-season, starting with most recent.
 
     Args:
         start_year: Starting year for data collection (default: 2010)
         include_playoffs: Whether to include playoff games
         batch_size: Number of players to process in each batch
-        save_progress: Whether to save progress periodically
-        output_file: File name to save results
+        save_progress: Whether to save individual season files
+        output_dir: Directory to save season files
 
     Returns:
-        DataFrame with all collected player box score data
+        Dictionary mapping season names to DataFrames
     """
-    logger.info(f"Starting NBA data collection from {start_year}...")
+    logger.info("🚀 Starting season-by-season NBA data collection")
+    logger.info(f"📅 Start year: {start_year}")
+    logger.info(f"🏀 Include playoffs: {include_playoffs}")
 
-    # Initialize collector with longer delay for stability
-    collector = DataCollector(rate_limit_delay=0.8)
+    # Initialize collector with better timeout handling
+    collector = DataCollector(rate_limit_delay=1.0)
 
-    # Get seasons to collect
-    seasons = collector.get_seasons_list(start_year=start_year)
-    logger.info(f"Seasons to collect: {seasons}")
+    # Get seasons to collect (newest first for better value)
+    all_seasons = collector.get_seasons_list(start_year=start_year)
+    seasons = list(reversed(all_seasons))  # Start with most recent
+    logger.info(f"📋 Seasons to collect: {seasons}")
 
     # Get all player IDs
     all_player_ids = get_all_historical_players(collector)
-
     if not all_player_ids:
-        logger.warning("No players found. Exiting.")
-        return pd.DataFrame()
+        logger.warning("❌ No players found. Exiting.")
+        return {}
 
-    logger.info(
-        f"Will collect data for {len(all_player_ids)} players "
-        f"across {len(seasons)} seasons"
-    )
-    calls_per_player = len(seasons) * (2 if include_playoffs else 1)
-    total_calls = len(all_player_ids) * calls_per_player
-    logger.info(f"Estimated total API calls: {total_calls}")
+    logger.info(f"👥 Total players to process: {len(all_player_ids)}")
 
-    # Collect data in batches
-    all_data_frames = []
-    total_games = 0
+    # Create output directory
+    import os
 
-    for i in range(0, len(all_player_ids), batch_size):
-        batch_end = min(i + batch_size, len(all_player_ids))
-        batch_player_ids = all_player_ids[i:batch_end]
+    if save_progress and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        logger.info(f"📁 Created output directory: {output_dir}")
 
-        logger.info(
-            f"Processing batch {i // batch_size + 1}: "
-            f"Players {i + 1}-{batch_end} of {len(all_player_ids)}"
-        )
+    # Process each season
+    season_results = {}
+    successful_seasons = []
+    failed_seasons = []
+
+    for i, season in enumerate(seasons, 1):
+        logger.info("=" * 60)
+        logger.info(f"🎯 PROCESSING SEASON {season} ({i}/{len(seasons)})")
+        logger.info("=" * 60)
 
         try:
-            batch_data = collector.collect_multiple_players(
-                batch_player_ids, seasons=seasons, include_playoffs=include_playoffs
+            # Collect data for this season
+            season_data = collect_season_data(
+                season=season,
+                player_ids=all_player_ids,
+                collector=collector,
+                include_playoffs=include_playoffs,
+                batch_size=batch_size,
             )
 
-            if not batch_data.empty:
-                all_data_frames.append(batch_data)
-                batch_games = len(batch_data)
-                total_games += batch_games
-                logger.info(f"Batch collected: {batch_games} games")
-                logger.info(f"Total games so far: {total_games}")
+            if not season_data.empty:
+                season_results[season] = season_data
+                successful_seasons.append(season)
 
-                # Save progress periodically
-                if save_progress and len(all_data_frames) % 5 == 0:
-                    temp_df = pd.concat(all_data_frames, ignore_index=True)
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    temp_filename = f"progress_{timestamp}.csv"
-                    temp_df.to_csv(temp_filename, index=False)
-                    logger.info(f"Progress saved to {temp_filename}")
+                # Save individual season file
+                if save_progress:
+                    season_filename = f"{output_dir}/nba_data_{season}.csv"
+                    season_data.to_csv(season_filename, index=False)
+                    logger.info(f"💾 Saved: {season_filename}")
+
+                # Log season summary
+                games_count = len(season_data)
+                players_count = season_data["PLAYER_ID"].nunique()
+                logger.info(
+                    f"✅ {season}: {games_count} games, {players_count} players"
+                )
+
             else:
-                logger.warning("No data collected for this batch")
+                logger.error(f"❌ No data collected for {season}")
+                failed_seasons.append(season)
 
         except Exception as e:
-            logger.error(f"Error processing batch {i // batch_size + 1}: {e}")
+            logger.error(f"💥 Season {season} failed: {e}")
+            failed_seasons.append(season)
             continue
+
+        # Brief pause between seasons
+        if i < len(seasons):
+            logger.info("⏸️ Brief pause between seasons...")
+            import time
+
+            time.sleep(5.0)
+
+    # Final summary
+    logger.info("=" * 60)
+    logger.info("🏁 COLLECTION COMPLETE!")
+    logger.info("=" * 60)
+    logger.info(f"✅ Successful seasons: {len(successful_seasons)}")
+    logger.info(f"❌ Failed seasons: {len(failed_seasons)}")
+
+    if successful_seasons:
+        total_games = sum(len(df) for df in season_results.values())
+        logger.info(f"📊 Total games collected: {total_games:,}")
+        logger.info(f"📅 Seasons with data: {successful_seasons}")
+
+    if failed_seasons:
+        logger.warning(f"⚠️ Failed seasons: {failed_seasons}")
+
+    return season_results
+
+
+def create_combined_dataset(
+    season_results: dict[str, pd.DataFrame],
+    output_file: str = "nba_comprehensive_data.csv",
+) -> pd.DataFrame:
+    """
+    Combine season-by-season results into a single dataset.
+
+    Args:
+        season_results: Dictionary of season DataFrames
+        output_file: Output file for combined data
+
+    Returns:
+        Combined DataFrame with all seasons
+    """
+    if not season_results:
+        logger.warning("⚠️ No season data to combine")
+        return pd.DataFrame()
+
+    logger.info("🔄 Combining all season data...")
+
+    # Combine all seasons
+    all_data_frames = list(season_results.values())
+    combined_df = pd.concat(all_data_frames, ignore_index=True)
+
+    # Add collection metadata
+    combined_df["DATA_COLLECTED_AT"] = datetime.now()
+
+    # Sort by player and date
+    combined_df = combined_df.sort_values(["PLAYER_ID", "GAME_DATE"])
+    combined_df = combined_df.reset_index(drop=True)
+
+    # Save combined results
+    combined_df.to_csv(output_file, index=False)
+    logger.info(f"💾 Combined data saved to {output_file}")
+
+    # Display summary stats
+    display_summary_stats(combined_df)
+
+    return combined_df
 
     # Combine all data
     if all_data_frames:
@@ -208,41 +366,52 @@ def update_nba_data(
     start_year: int = 2010,
     include_playoffs: bool = True,
     output_file: str = "nba_comprehensive_data.csv",
+    batch_size: int = 12,
 ) -> bool:
-    """Update NBA data collection.
+    """Update NBA data collection using season-by-season approach.
 
     Args:
         start_year: Starting year for data collection
         include_playoffs: Whether to include playoff games
         output_file: Output CSV file name
+        batch_size: Number of players per batch
 
     Returns:
         True if successful, False otherwise
     """
     try:
         logger.info("=" * 60)
-        logger.info("NBA PLAYER DATA UPDATE")
+        logger.info("🏀 NBA PLAYER DATA UPDATE - SEASON BY SEASON")
         logger.info("=" * 60)
 
-        all_data = collect_all_nba_data(
+        # Collect data season by season
+        season_results = collect_all_nba_data_by_season(
             start_year=start_year,
             include_playoffs=include_playoffs,
-            batch_size=25,
+            batch_size=batch_size,
             save_progress=True,
-            output_file=output_file,
+            output_dir="season_data",
         )
 
-        if not all_data.empty:
-            games_count = f"{len(all_data):,}"
-            logger.info(f"✅ Update successful! {games_count} games collected.")
-            logger.info("Data is ready for analysis and modeling.")
-            return True
-        else:
-            logger.error("❌ Update failed - no data collected.")
-            return False
+        if season_results:
+            # Create combined dataset
+            combined_data = create_combined_dataset(
+                season_results, output_file=output_file
+            )
+
+            if not combined_data.empty:
+                games_count = f"{len(combined_data):,}"
+                seasons_count = len(season_results)
+                logger.info("🎉 Update successful!")
+                logger.info(f"📊 {games_count} games from {seasons_count} seasons")
+                logger.info("🚀 Data is ready for analysis and modeling!")
+                return True
+
+        logger.error("❌ Update failed - no data collected.")
+        return False
 
     except Exception as e:
-        logger.error(f"❌ Update failed with error: {e}")
+        logger.error(f"💥 Update failed with error: {e}")
         return False
 
 
