@@ -85,24 +85,56 @@ nba-player-props/
 
 ## Usage
 
+### Quick Start - Single Player Data
 ```python
-from nba_player_props import DataCollector, PlayerAnalyzer, PropPredictor
+from nba_player_props import DataCollector
 
-# Collect player data
+# Initialize collector
 collector = DataCollector()
-player_stats = collector.get_player_stats(player_id=1234, season="2023-24")
-game_logs = collector.get_game_logs(player_id=1234, season="2023-24")
 
-# Analyze performance
-analyzer = PlayerAnalyzer()
-averages = analyzer.calculate_averages(game_logs, rolling_window=10)
-matchup_analysis = analyzer.analyze_matchup(player_stats, opponent="LAL")
+# Get LeBron James data for recent seasons
+lebron_data = collector.get_player_data_by_name(
+    "LeBron James", 
+    seasons=["2022-23", "2023-24"]
+)
 
-# Predict prop outcomes
-predictor = PropPredictor()
-predictor.train_model(player_stats, target_stat="points")
-over_prob, under_prob = predictor.predict_prop(player_stats, prop_line=25.5)
-recommendation = predictor.get_recommendation(player_stats, prop_line=25.5)
+print(f"Collected {len(lebron_data)} games")
+print(f"Average points: {lebron_data['PTS'].mean():.1f}")
+```
+
+### Comprehensive Data Collection
+```python
+# Run the comprehensive collection script
+python example_usage.py
+
+# This will:
+# 1. Collect ALL NBA players from 2010-present
+# 2. Include regular season + playoffs
+# 3. Save results to CSV file
+# 4. Handle rate limiting and errors automatically
+```
+
+### Advanced Usage - Multiple Players
+```python
+from nba_player_props import DataCollector
+
+collector = DataCollector()
+
+# Get all active players
+active_players = collector.get_active_players()
+player_ids = active_players['PERSON_ID'].head(10).tolist()
+
+# Collect data for multiple players efficiently
+all_data = collector.collect_multiple_players(
+    player_ids, 
+    seasons=["2023-24"],
+    include_playoffs=True
+)
+
+# Results include:
+# - PLAYER_ID, SEASON, SEASON_TYPE
+# - All standard box score stats (PTS, REB, AST, etc.)
+# - Game metadata (GAME_DATE, MATCHUP, etc.)
 ```
 
 ## Configuration

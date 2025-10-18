@@ -2,6 +2,7 @@
 
 import pytest
 import pandas as pd
+from datetime import date
 from nba_player_props.data_collector import DataCollector
 
 
@@ -11,29 +12,44 @@ class TestDataCollector:
     def test_init(self):
         """Test DataCollector initialization."""
         collector = DataCollector()
-        assert collector.base_url == "https://stats.nba.com/stats"
-        assert "User-Agent" in collector.headers
+        assert collector.rate_limit_delay == 0.6
+        
+    def test_init_with_custom_delay(self):
+        """Test DataCollector initialization with custom delay."""
+        collector = DataCollector(rate_limit_delay=1.0)
+        assert collector.rate_limit_delay == 1.0
     
-    def test_get_player_stats_returns_dataframe(self):
-        """Test get_player_stats returns a DataFrame."""
+    def test_get_player_id_valid_player(self):
+        """Test get_player_id with a known player."""
         collector = DataCollector()
-        result = collector.get_player_stats(player_id=123, season="2023-24")
+        # Test with LeBron James - should return his player ID
+        player_id = collector.get_player_id("LeBron James")
+        assert player_id is not None
+        assert isinstance(player_id, int)
+    
+    def test_get_player_id_invalid_player(self):
+        """Test get_player_id with non-existent player."""
+        collector = DataCollector()
+        player_id = collector.get_player_id("Non Existent Player")
+        assert player_id is None
+    
+    def test_get_player_box_scores_since_2015_returns_dataframe(self):
+        """Test that get_player_box_scores_since_2015 returns a DataFrame."""
+        collector = DataCollector()
+        # Use a specific end date to limit data and speed up test
+        end_date = date(2016, 1, 1)
+        result = collector.get_player_box_scores_since_2015(
+            "LeBron James",
+            end_date=end_date
+        )
         assert isinstance(result, pd.DataFrame)
     
-    def test_get_game_logs_returns_dataframe(self):
-        """Test get_game_logs returns a DataFrame."""
+    def test_generate_seasons_until_date(self):
+        """Test _generate_seasons_until_date method."""
         collector = DataCollector()
-        result = collector.get_game_logs(player_id=123, season="2023-24")
-        assert isinstance(result, pd.DataFrame)
-    
-    def test_get_player_stats_with_default_season(self):
-        """Test get_player_stats with default season parameter."""
-        collector = DataCollector()
-        result = collector.get_player_stats(player_id=123)
-        assert isinstance(result, pd.DataFrame)
-    
-    def test_get_game_logs_with_default_season(self):
-        """Test get_game_logs with default season parameter."""
-        collector = DataCollector()
-        result = collector.get_game_logs(player_id=123)
-        assert isinstance(result, pd.DataFrame)
+        end_date = date(2017, 6, 30)
+        seasons = collector._generate_seasons_until_date(end_date)
+        
+        assert "2015-16" in seasons
+        assert "2016-17" in seasons
+        assert len(seasons) >= 2
