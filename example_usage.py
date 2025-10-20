@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from nba_player_props.data_collector import DataCollector
+from nba_player_props.data_collector.data_collector import DataCollector
 
 # Configure logging
 logging.basicConfig(

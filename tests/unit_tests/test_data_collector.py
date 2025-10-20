@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import pandas as pd
 import pytest
 
-from nba_player_props.data_collector import DataCollector
+from nba_player_props.data_collector.data_collector import DataCollector
 
 #########################
 # Fixtures

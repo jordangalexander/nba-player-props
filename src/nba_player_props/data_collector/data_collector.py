@@ -62,6 +62,23 @@ class DataCollector:
             return player_dict[0]["id"]
         return None
 
+    def get_player_name_by_id(self, player_id: int) -> str | None:
+        """Get NBA player name from player ID using static data.
+
+        Args:
+            player_id: NBA player ID
+
+        Returns:
+            Player full name if found, None otherwise
+        """
+        try:
+            player_info = players.find_player_by_id(player_id)
+            if player_info:
+                return player_info["full_name"]
+        except Exception:
+            pass
+        return None
+
     def get_seasons_list(self, start_year: int = 2010) -> list[str]:
         """Get list of NBA seasons from start_year to current season.
 
@@ -121,6 +138,12 @@ class DataCollector:
                     df["SEASON"] = season
                     df["SEASON_TYPE"] = season_type
                     df["PLAYER_ID"] = player_id
+
+                    # Add player name for easier analysis
+                    player_name = self.get_player_name_by_id(player_id)
+                    df["PLAYER_NAME"] = (
+                        player_name if player_name else f"Player_{player_id}"
+                    )
 
                 return df
 
