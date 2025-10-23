@@ -17,10 +17,10 @@ from nba_player_props.data_collector.data_collector import DataCollector
 
 
 def get_target_players():
-    """Get the same 30 key players for all collections"""
+    """Get all 45 key players for comprehensive data collection"""
 
     return [
-        # Core superstars
+        # Core superstars (original 30)
         "LeBron James",
         "Stephen Curry",
         "Kevin Durant",
@@ -53,6 +53,22 @@ def get_target_players():
         "Jalen Green",
         "Desmond Bane",
         "Mikal Bridges",
+        # Next 15 recommended players (data-driven selection)
+        "Domantas Sabonis",
+        "Jalen Brunson",
+        "Pascal Siakam",
+        "Donovan Mitchell",
+        "Julius Randle",
+        "Bam Adebayo",
+        "Jaylen Brown",
+        "Karl-Anthony Towns",
+        "Brandon Ingram",
+        "Coby White",
+        "Anfernee Simons",
+        "Jaren Jackson Jr.",
+        "Darius Garland",
+        "Derrick White",
+        "CJ McCollum",
     ]
 
 
@@ -97,28 +113,58 @@ def collect_season_data(season: str, collector: DataCollector):
 
     # Combine and save season data
     if all_data:
-        combined_df = pd.concat(all_data, ignore_index=True)
+        new_combined_df = pd.concat(all_data, ignore_index=True)
 
-        # Remove duplicates
-        initial_count = len(combined_df)
-        combined_df = combined_df.drop_duplicates(subset=["PLAYER_ID", "Game_ID"])
-        final_count = len(combined_df)
+        # Remove duplicates within new data
+        initial_count = len(new_combined_df)
+        new_combined_df = new_combined_df.drop_duplicates(
+            subset=["PLAYER_ID", "Game_ID"]
+        )
+        new_final_count = len(new_combined_df)
 
-        if initial_count != final_count:
-            print(f"\n🔧 Removed {initial_count - final_count} duplicate games")
+        if initial_count != new_final_count:
+            print(
+                f"\n🔧 Removed {initial_count - new_final_count} duplicate games in new data"
+            )
 
-        # Save individual season file
+        # Check if season file already exists and append new players
         os.makedirs("data/player_box_scores", exist_ok=True)
         output_file = f"data/player_box_scores/nba_player_games_{season}.csv"
-        combined_df.to_csv(output_file, index=False)
 
+        if os.path.exists(output_file):
+            print(f"📄 Existing file found for {season}, appending new players...")
+            existing_df = pd.read_csv(output_file)
+
+            # Combine existing and new data
+            combined_df = pd.concat([existing_df, new_combined_df], ignore_index=True)
+
+            # Remove duplicates across all data
+            pre_dedup_count = len(combined_df)
+            combined_df = combined_df.drop_duplicates(subset=["PLAYER_ID", "Game_ID"])
+            post_dedup_count = len(combined_df)
+
+            if pre_dedup_count != post_dedup_count:
+                print(
+                    f"🔧 Removed {pre_dedup_count - post_dedup_count} duplicates after merging"
+                )
+
+            new_games_added = len(combined_df) - len(existing_df)
+            print(
+                f"📈 Added {new_games_added} new games to existing {len(existing_df)} games"
+            )
+        else:
+            print(f"📄 Creating new file for {season}...")
+            combined_df = new_combined_df
+
+        # Save the combined file
+        combined_df.to_csv(output_file, index=False)
         file_size_mb = os.path.getsize(output_file) / (1024 * 1024)
 
         print(f"\n🎉 {season} COLLECTION SUCCESS!")
-        print(f"   📊 Total games collected: {len(combined_df):,}")
+        print(f"   📊 Total games in file: {len(combined_df):,}")
         print(f"   👥 Unique players: {combined_df['PLAYER_ID'].nunique()}")
-        print(f"   ✅ Successful players: {len(successful_players)}")
-        print(f"   ❌ Failed players: {len(failed_players)}")
+        print(f"   ✅ Successful new players: {len(successful_players)}")
+        print(f"   ❌ Failed new players: {len(failed_players)}")
         print(f"   💾 Saved to: {output_file} ({file_size_mb:.1f} MB)")
 
         if combined_df["GAME_DATE"].notna().any():

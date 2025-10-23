@@ -204,7 +204,10 @@ class DataCollector:
         # Combine and clean data
         if all_games:
             combined_df = pd.concat(all_games, ignore_index=True)
-            combined_df["GAME_DATE"] = pd.to_datetime(combined_df["GAME_DATE"])
+            # Use more flexible date parsing to handle different formats
+            combined_df["GAME_DATE"] = pd.to_datetime(
+                combined_df["GAME_DATE"], errors="coerce"
+            )
             combined_df = combined_df.sort_values("GAME_DATE")
             combined_df = combined_df.reset_index(drop=True)
             return combined_df
