@@ -72,70 +72,143 @@ nba-player-props/
 ├── src/
 │   └── nba_player_props/
 │       ├── __init__.py
-│       ├── data_collector.py    # NBA data retrieval
-│       ├── analyzer.py          # Statistical analysis
-│       └── predictor.py         # ML prediction models
-├── tests/                       # Test suite
-├── requirements.txt            # Core dependencies
-├── requirements-dev.txt        # Development dependencies
-├── pyproject.toml             # Project configuration
-├── tox.ini                    # Testing configuration
-└── README.md
+│       ├── data_collector/
+│       │   ├── __init__.py
+│       │   ├── data_collector.py    # Core data collection module
+│       │   └── collect_nba_data.py  # Advanced collection utilities
+│       ├── analyzer.py              # Statistical analysis
+│       └── predictor.py             # ML prediction models
+├── data/
+│   └── player_box_scores/          # Season CSV files
+├── notebooks/                       # Jupyter notebooks for analysis
+├── tests/                          # Test suite
+├── update_data.py                  # 🎯 Main updater (use this!)
+├── flexible_collect.py             # Advanced collection tool
+├── recommend_players.py            # Player recommendation analysis
+├── requirements.txt               # Core dependencies
+├── requirements-dev.txt           # Development dependencies
+├── pyproject.toml                # Project configuration
+└── tox.ini                       # Testing configuration
 ```
+
+**Key Scripts:**
+- **`update_data.py`** - Your go-to script for keeping data current ⭐
+- **`flexible_collect.py`** - Advanced data collection with full control
+- **`recommend_players.py`** - Analyze and recommend players for prop betting
 
 ## Usage
 
-### Quick Start - Single Player Data
+### 🎯 Quick Start - Update Current Season Data
+
+The easiest way to keep your data current:
+
+```bash
+# Check what data you have
+python update_data.py --check
+
+# Update all tracked players for current season (auto-detected)
+python update_data.py
+
+# Update specific player list
+python update_data.py --players original_30
+```
+
+**That's it!** The script auto-detects the current season and updates through today.
+
+### 📊 Data Collection Scripts
+
+We have two main scripts for data collection:
+
+1. **`update_data.py`** - Smart updater (recommended for regular use)
+   - Auto-detects current season
+   - Checks existing data
+   - Updates through today
+   - Simple and fast
+
+2. **`flexible_collect.py`** - Advanced control (for specific needs)
+   - Collect specific players
+   - Target specific seasons or date ranges
+   - Custom player lists
+   - More control over the process
+
+### 🚀 Common Use Cases
+
+#### Update Current Season
+```bash
+# Update all tracked players (60 players total)
+python update_data.py
+
+# Just the core 30 superstars
+python update_data.py --players original_30
+```
+
+#### Check Data Status
+```bash
+python update_data.py --check
+```
+
+This shows:
+- What seasons you have data for
+- How many games and players per season
+- When data was last updated
+- If current season needs updating
+
+#### Backfill Historical Data
+```bash
+# Update a specific past season
+python update_data.py --season 2023-24
+
+# Or use flexible_collect for range
+python flexible_collect.py --players original_30 --start 2020 --end 2024
+```
+
+#### Custom Player Lists
+```bash
+# Available lists: original_30, second_wave_15, third_wave_15
+python flexible_collect.py --players second_wave_15 --seasons 2024-25
+
+# Or provide comma-separated names
+python flexible_collect.py --players "LeBron James,Stephen Curry,Nikola Jokic" --seasons 2024-25
+```
+
+### 🐍 Python API Usage
+
 ```python
-from nba_player_props import DataCollector
+from nba_player_props.data_collector import DataCollector
 
 # Initialize collector
 collector = DataCollector()
 
-# Get LeBron James data for recent seasons
+# Get single player data
 lebron_data = collector.get_player_data_by_name(
     "LeBron James", 
-    seasons=["2022-23", "2023-24"]
+    seasons=["2024-25", "2023-24"]
 )
 
 print(f"Collected {len(lebron_data)} games")
 print(f"Average points: {lebron_data['PTS'].mean():.1f}")
-```
 
-### Comprehensive Data Collection
-```python
-# Run the comprehensive collection script
-python example_usage.py
-
-# This will:
-# 1. Collect ALL NBA players from 2010-present
-# 2. Include regular season + playoffs
-# 3. Save results to CSV file
-# 4. Handle rate limiting and errors automatically
-```
-
-### Advanced Usage - Multiple Players
-```python
-from nba_player_props import DataCollector
-
-collector = DataCollector()
-
-# Get all active players
-active_players = collector.get_active_players()
-player_ids = active_players['PERSON_ID'].head(10).tolist()
-
-# Collect data for multiple players efficiently
+# Get multiple players efficiently
+player_ids = [2544, 201939, 203507]  # LeBron, Curry, Giannis
 all_data = collector.collect_multiple_players(
     player_ids, 
-    seasons=["2023-24"],
-    include_playoffs=True
+    seasons=["2024-25"],
+    include_playoffs=False
 )
-
-# Results include:
-# - PLAYER_ID, SEASON, SEASON_TYPE
-# - All standard box score stats (PTS, REB, AST, etc.)
-# - Game metadata (GAME_DATE, MATCHUP, etc.)
 ```
+
+### 📁 Data Files
+
+Data is saved to `data/player_box_scores/`:
+- `nba_player_games_2024-25.csv` - Current season
+- `nba_player_games_2023-24.csv` - Previous seasons
+- etc.
+
+Each file contains:
+- Player box score stats (PTS, REB, AST, etc.)
+- Game metadata (date, matchup, W/L)
+- Season identifiers
+- Player IDs and names
 
 ## Configuration
 
